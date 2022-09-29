@@ -106,7 +106,7 @@ def plot_voronoi_fromVariable(tree: cKDTree,
     plt.xlabel('x in meters')
     plt.ylabel('y in meters')
 
-    plt.show()
+    plt.show(block=False)
 
 
 # ----------------------------------------------------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import os.path
 import matplotlib.path as mplPath
 from scipy.spatial import cKDTree
 import frictionmap
+import sys
 
 """
 Created by:
@@ -31,11 +32,17 @@ corresponding cells of the friction map with a default mue value.
 #                         only necessary for circuits (closed racetracks).
 # bool_show_plots:        boolean which enables plotting of the reference line, the friction map and the corresponding
 #                         mue values
+# friction_boundaries     split the track in s coordinate, so you can define different friction on the map
+# friction_coeficients    define sequence of friction coefficients for each track split
 
-track_name = "modena_2019"
-initial_mue = 0.8
-cellwidth_m = 2.0
-inside_trackbound = 'right'
+friction_boundaries = [0.0, 44.0, 100.0]  # needs to always start from zero and end at 100
+friction_coeficients = [1.1, 0.5]
+
+track_name = "Nuerburgring_friction_gen_input"
+# SaoPaulo_centerline, rounded_rectangle, l_shape_friction_gen_input, Nuerburgring_friction_gen_input
+initial_mue = 0.0
+cellwidth_m = 1.0
+inside_trackbound = 'right'  # if getting error: ValueError: No points given File "qhull.pyx", change this to right/left
 bool_show_plots = True
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -44,8 +51,8 @@ bool_show_plots = True
 
 # determine names of output files
 datetime_save = datetime.now().strftime("%Y%m%d_%H%M%S")
-filename_tpamap = datetime_save + '_' + track_name + '_tpamap.csv'
-filename_tpadata = datetime_save + '_' + track_name + '_tpadata.json'
+filename_tpamap = track_name + '_tpamap.csv'  # datetime_save + '_' +
+filename_tpadata = track_name + '_tpadata.json'
 
 # set paths
 path2module = os.path.dirname(os.path.abspath(__file__))
@@ -66,6 +73,17 @@ bool_isclosed_refline = frictionmap.src.reftrack_functions.check_isclosed_reflin
 # calculate coordinates of the track boundaries
 reftrackbound_right, reftrackbound_left = frictionmap.src.reftrack_functions.calc_trackboundaries(reftrack=reftrack)
 
+# construct array between each two points on the trajectory
+track_point_distances = []
+for i in range(len(reftrack[:, :2]) - 1):
+    track_point_distances.append(math.sqrt(pow(reftrack[:, :2][i][0] - reftrack[:, :2][i + 1][0], 2.0) + pow(reftrack[:, :2][i][1] - reftrack[:, :2][i + 1][1], 2.0)))
+
+# if is the trajectory closed add the distance between last and first point as well
+if bool_isclosed_refline:
+    track_point_distances.append(math.sqrt(pow(reftrack[:, :2][-1][0] - reftrack[:, :2][0][0], 2.0) + pow(reftrack[:, :2][-1][1] - reftrack[:, :2][0][1], 2.0)))
+
+# calculate cumulative sum from the distances
+track_cumsum_distances = np.cumsum(track_point_distances)
 # ----------------------------------------------------------------------------------------------------------------------
 # SAMPLE COORDINATES FOR FRICTION MAP ----------------------------------------------------------------------------------
 # ----------------------------------------------------------------------------------------------------------------------
@@ -116,9 +134,9 @@ dist_to_trackbound = cellwidth_m * 1.1
 
 # distinguish between a closed racetrack (circuit) and an "open" racetrack
 if bool_isclosed_refline:
-    bool_isIn_rightBound = mplPath.Path(trackbound_outside).\
+    bool_isIn_rightBound = mplPath.Path(trackbound_outside). \
         contains_points(coordinates, radius=(dist_to_trackbound * sign_trackbound))
-    bool_isIn_leftBound = mplPath.Path(trackbound_inside).\
+    bool_isIn_leftBound = mplPath.Path(trackbound_inside). \
         contains_points(coordinates, radius=-(dist_to_trackbound * sign_trackbound))
     bool_OnTrack = (bool_isIn_rightBound & ~bool_isIn_leftBound)
 
@@ -142,7 +160,31 @@ timer_start = time.perf_counter()
 tpamap_indices = tpa_map.indices
 tpa_data = dict(zip(tpamap_indices, np.full((tpamap_indices.shape[0], 1), initial_mue)))
 
+
 print('INFO: Time elapsed for tpa_data dictionary building: {:.3f}s'.format(time.perf_counter() - timer_start))
+
+# search through all friction coefficients
+for i in range(tpa_map.data.size//2):
+    # find closest point on the trajectory to the current friction point
+    min_distance = 100000.0
+    closest_point_id = 0
+    for j in range(len(reftrack[:, :2])):
+        distance = math.sqrt(pow(tpa_map.data[i][0] - reftrack[:, :2][j][0], 2.0) + pow(tpa_map.data[i][1] - reftrack[:, :2][j][1], 2.0))
+        if distance < min_distance:
+            min_distance = distance
+            closest_point_id = j
+    # calculate where on the trajectory is this point [%]
+    percentage_distance_from_start = 100.0/track_cumsum_distances[-1]*track_cumsum_distances[closest_point_id]
+    # assign new friction based on the percentage
+    for j in range(len(friction_boundaries)):
+        if percentage_distance_from_start <= friction_boundaries[j]:
+            tpa_data[i] = np.array([friction_coeficients[j - 1]])
+            fin = 1
+            break
+
+    #tpa_map.data[i]
+    #tpa_data[i] = np.array([1.2])
+
 
 # save friction map (only grid) ('*_tpamap.csv')
 with open(path2tpamap_file, 'wb') as fh:
@@ -168,14 +210,14 @@ if bool_show_plots:
     frictionmap.src.reftrack_functions.plot_refline(reftrack=reftrack)
 
     # plot spatial grid of friction map
-    frictionmap.src.plot_frictionmap_grid.\
+    frictionmap.src.plot_frictionmap_grid. \
         plot_voronoi_fromVariable(tree=tpa_map,
                                   refline=reftrack[:, :2],
                                   trackbound_left=reftrackbound_left,
                                   trackbound_right=reftrackbound_right)
 
     # plot friction data of friction map
-    frictionmap.src.plot_frictionmap_data.\
+    frictionmap.src.plot_frictionmap_data. \
         plot_tpamap_fromVariable(tpa_map=tpa_map,
                                  tpa_data=tpa_data,
                                  refline=reftrack[:, :2],

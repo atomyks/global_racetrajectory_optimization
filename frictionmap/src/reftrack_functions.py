@@ -151,7 +151,7 @@ def plot_refline(reftrack: np.ndarray) -> None:
     plt.ylabel('y in meters')
     plt.axis('equal')
 
-    plt.show()
+    plt.show(block=False)
 
 
 # ----------------------------------------------------------------------------------------------------------------------
