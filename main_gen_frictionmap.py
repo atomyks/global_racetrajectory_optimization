@@ -32,13 +32,15 @@ corresponding cells of the friction map with a default mue value.
 #                         only necessary for circuits (closed racetracks).
 # bool_show_plots:        boolean which enables plotting of the reference line, the friction map and the corresponding
 #                         mue values
-# friction_boundaries     split the track in s coordinate, so you can define different friction on the map
-# friction_coeficients    define sequence of friction coefficients for each track split
+# friction_descriptions   description of the frictions along the track
 
-friction_boundaries = [0.0, 44.0, 100.0]  # needs to always start from zero and end at 100
-friction_coeficients = [1.1, 0.5]
 
-track_name = "Nuerburgring_friction_gen_input"
+# Example  {'percentage_location_s': [0.0, 7.0], 'change': 'constant', 'friction': [0.5]} <= from 0% to 7% of the track constant friction 0.5
+friction_descriptions = [{'percentage_location_s': [0.0, 1.0], 'change': 'constant', 'friction': [1.3]},
+                         {'percentage_location_s': [1.0, 100.0], 'change': 'linear', 'friction': [0.0, 1.3]},
+                         ]
+
+track_name = "l_shape_friction_gen_input"
 # SaoPaulo_centerline, rounded_rectangle, l_shape_friction_gen_input, Nuerburgring_friction_gen_input
 initial_mue = 0.0
 cellwidth_m = 1.0
@@ -76,7 +78,8 @@ reftrackbound_right, reftrackbound_left = frictionmap.src.reftrack_functions.cal
 # construct array between each two points on the trajectory
 track_point_distances = []
 for i in range(len(reftrack[:, :2]) - 1):
-    track_point_distances.append(math.sqrt(pow(reftrack[:, :2][i][0] - reftrack[:, :2][i + 1][0], 2.0) + pow(reftrack[:, :2][i][1] - reftrack[:, :2][i + 1][1], 2.0)))
+    track_point_distances.append(
+        math.sqrt(pow(reftrack[:, :2][i][0] - reftrack[:, :2][i + 1][0], 2.0) + pow(reftrack[:, :2][i][1] - reftrack[:, :2][i + 1][1], 2.0)))
 
 # if is the trajectory closed add the distance between last and first point as well
 if bool_isclosed_refline:
@@ -160,31 +163,28 @@ timer_start = time.perf_counter()
 tpamap_indices = tpa_map.indices
 tpa_data = dict(zip(tpamap_indices, np.full((tpamap_indices.shape[0], 1), initial_mue)))
 
-
 print('INFO: Time elapsed for tpa_data dictionary building: {:.3f}s'.format(time.perf_counter() - timer_start))
 
 # search through all friction coefficients
-for i in range(tpa_map.data.size//2):
+for i in range(tpa_map.data.size // 2):
     # find closest point on the trajectory to the current friction point
-    min_distance = 100000.0
-    closest_point_id = 0
-    for j in range(len(reftrack[:, :2])):
-        distance = math.sqrt(pow(tpa_map.data[i][0] - reftrack[:, :2][j][0], 2.0) + pow(tpa_map.data[i][1] - reftrack[:, :2][j][1], 2.0))
-        if distance < min_distance:
-            min_distance = distance
-            closest_point_id = j
+    closest_point_id = np.argmin(np.sum(np.square(reftrack[:, :2] - tpa_map.data[i]), 1))
+
     # calculate where on the trajectory is this point [%]
-    percentage_distance_from_start = 100.0/track_cumsum_distances[-1]*track_cumsum_distances[closest_point_id]
-    # assign new friction based on the percentage
-    for j in range(len(friction_boundaries)):
-        if percentage_distance_from_start <= friction_boundaries[j]:
-            tpa_data[i] = np.array([friction_coeficients[j - 1]])
-            fin = 1
-            break
+    percentage_distance_from_start = 100.0 / track_cumsum_distances[-1] * track_cumsum_distances[closest_point_id]
 
-    #tpa_map.data[i]
-    #tpa_data[i] = np.array([1.2])
-
+    for friction_description in friction_descriptions:
+        if friction_description['percentage_location_s'][0] <= percentage_distance_from_start < friction_description['percentage_location_s'][1]:
+            if friction_description['change'] == 'constant':
+                tpa_data[i] = np.array([friction_description['friction'][0]])
+            elif friction_description['change'] == 'linear':
+                s_0 = friction_description['percentage_location_s'][0]
+                s_1 = friction_description['percentage_location_s'][1]
+                s_current = percentage_distance_from_start
+                f_0 = friction_description['friction'][0]
+                f_1 = friction_description['friction'][1]
+                f_current = (f_1 - f_0) / (s_1 - s_0) * (s_current - s_0) + f_0
+                tpa_data[i] = np.array([f_current])
 
 # save friction map (only grid) ('*_tpamap.csv')
 with open(path2tpamap_file, 'wb') as fh:
