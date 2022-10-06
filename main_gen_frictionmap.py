@@ -32,17 +32,24 @@ corresponding cells of the friction map with a default mue value.
 #                         only necessary for circuits (closed racetracks).
 # bool_show_plots:        boolean which enables plotting of the reference line, the friction map and the corresponding
 #                         mue values
-# friction_descriptions   description of the frictions along the track
+# friction_descriptions   description of the frictions along the track.
+#                         Parameters:
+#                           - percentage_location_s: (array of two floats) Distance in % from the beginning of the trajectory.
+#                                                    This specifies the region where to apply the friction.
+#                                                    !!! Important !!! - In the current version the first number must be always lower than the second one.
+#                           - change: ('constant' / 'linear') Constant - constant friction in the region
+#                                                           Linear - Linear change of the friction in the region.
+#                           - friction: (Array of one(for 'constant' change) / two(for 'linear' change) floats) Defines the friction in the region.
 
 
-# Example  {'percentage_location_s': [0.0, 7.0], 'change': 'constant', 'friction': [0.5]} <= from 0% to 7% of the track constant friction 0.5
-friction_descriptions = [{'percentage_location_s': [0.0, 1.0], 'change': 'constant', 'friction': [1.3]},
-                         {'percentage_location_s': [1.0, 100.0], 'change': 'linear', 'friction': [0.0, 1.3]},
+# Example  {'percentage_location_s': [0.0, 7.0], 'change': 'constant/linear', 'friction': [0.5]} <= from 0% to 7% of the track constant friction 0.5
+friction_descriptions = [{'percentage_location_s': [0.0, 68.0], 'change': 'constant', 'friction': [1.1]},
+                         {'percentage_location_s': [68.0, 100.0], 'change': 'constant', 'friction': [0.5]},
                          ]
 
 track_name = "l_shape_friction_gen_input"
 # SaoPaulo_centerline, rounded_rectangle, l_shape_friction_gen_input, Nuerburgring_friction_gen_input
-initial_mue = 0.0
+initial_mue = 1.0
 cellwidth_m = 1.0
 inside_trackbound = 'right'  # if getting error: ValueError: No points given File "qhull.pyx", change this to right/left
 bool_show_plots = True
